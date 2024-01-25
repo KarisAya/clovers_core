@@ -1,7 +1,12 @@
+import sys
 import importlib
 import importlib.util
+import importlib.machinery
 import re
+from pathlib import Path
 from collections.abc import Callable
+
+from .config import Config
 
 
 class PluginException(Exception):
@@ -63,6 +68,7 @@ class Plugin:
         self.command_dict: dict[str, set[int]] = {}
         self.regex_dict: dict[re.Pattern, set[int]] = {}
         self.got_dict: dict = {}
+        self.raw_config: dict = {}
 
     def handle(
         self,
@@ -71,13 +77,13 @@ class Plugin:
     ):
         def decorator(func: Callable):
             key = len(self.handles)
-            if isinstance(commands, str):
-                self.command_dict.setdefault(commands, set()).add(key)
-            elif isinstance(commands, set):
+            if isinstance(commands, set):
                 for command in commands:
                     self.command_dict.setdefault(command, set()).add(key)
+            elif isinstance(commands, str):
+                self.regex_dict.setdefault(re.compile(commands), set()).add(key)
             elif isinstance(commands, re.Pattern):
-                self.regex_dict.setdefault(command, set()).add(key)
+                self.regex_dict.setdefault(commands, set()).add(key)
             else:
                 raise PluginException(f"指令：{commands} 类型错误：{type(commands)}")
 
@@ -92,28 +98,11 @@ class Plugin:
 
         return decorator
 
-    @staticmethod
-    def load(name: str, path: str = None):
-        print(f"【loading plugin】 {name} ...")
-        try:
-            if path:
-                spec = importlib.util.spec_from_file_location("custom_module", path)
-                module = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(module)
-            else:
-                module = importlib.import_module(name)
-            plugin = module.__plugin__
-            print("\tSuccess !")
-            return plugin
-        except Exception as e:
-            print(f"\tFail:{e}")
-            return
-
     def command_check(self, command: str) -> dict[int, Event]:
-        if not (command_list := command.strip().split()):
-            return
-        command_start = command_list[0]
         kv = {}
+        if not (command_list := command.strip().split()):
+            return kv
+        command_start = command_list[0]
         for cmd, keys in self.command_dict.items():
             if not command_start.startswith(cmd):
                 continue
@@ -127,7 +116,50 @@ class Plugin:
 
         return kv
 
+    def regex_check(self, command: str) -> dict[int, Event]:
+        kv = {}
+        for pattern, keys in self.regex_dict.items():
+            if re.match(pattern, command):
+                for key in keys:
+                    kv[key] = Event(command)
+        return kv
+
     def __call__(self, command: str) -> dict[int, Event]:
         kv = {}
         kv.update(self.command_check(command))
+        kv.update(self.regex_check(command))
         return kv
+
+
+class PluginManager:
+    def __init__(self, plugins_path: Path, config: Config) -> None:
+        self.plugins_path: Path = plugins_path
+        self.config: Config = config
+        self.plugins: list[Plugin] = []
+
+    @staticmethod
+    def load(name: str) -> Plugin:
+        print(f"【loading plugin】 {name} ...")
+        return importlib.import_module(name).__plugin__
+
+    def load_plugins_from_path(self, plugins_path: Path):
+        plugins_raw_path = str(plugins_path)
+        sys.path.insert(0, plugins_raw_path)
+        plugins = []
+        for x in plugins_path.iterdir():
+            name = x.stem if x.is_file() and x.name.endswith(".py") else x.name
+            if name.startswith("_"):
+                continue
+            plugins.append(self.load(name))
+        sys.path = [path for path in sys.path if path != plugins_raw_path]
+        self.plugins += [plugin for plugin in plugins if plugin]
+
+    def load_plugins_from_list(self, plugins_list: list):
+        plugins = []
+        for x in plugins_list:
+            plugins.append(self.load(x))
+        self.plugins += [plugin for plugin in plugins if plugin]
+
+    def load_plugins(self):
+        self.load_plugins_from_list(self.config.plugins_list)
+        self.load_plugins_from_path(self.plugins_path)

@@ -4,7 +4,8 @@ from pathlib import Path
 
 
 class Config(BaseModel, extra=Extra.ignore):
-    plugins: list = []
+    plugins_list: list = []
+    plugins: dict = {}
 
     @classmethod
     def load(cls, path: Path):
