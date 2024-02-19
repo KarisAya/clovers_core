@@ -17,7 +17,7 @@ class AdapterMethod:
     def get_kwarg(self, method_name: str) -> Callable:
         """添加一个获取参数方法"""
 
-        def decorator(func: Coroutine):
+        def decorator(func: Callable[..., Coroutine]):
             self.kwarg[method_name] = self.kwfilter(func)
 
         return decorator
@@ -25,13 +25,13 @@ class AdapterMethod:
     def send_message(self, method_name: str) -> Callable:
         """添加一个发送消息方法"""
 
-        def decorator(func: Coroutine):
+        def decorator(func: Callable[..., Coroutine]):
             self.send[method_name] = self.kwfilter(func)
 
         return decorator
 
     @staticmethod
-    def kwfilter(func: Coroutine):
+    def kwfilter(func: Callable[..., Coroutine]):
         kw = inspect.signature(func).parameters.keys()
 
         async def wrapper(*args, **kwargs):

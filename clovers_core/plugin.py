@@ -3,8 +3,9 @@ import importlib
 import importlib.util
 import importlib.machinery
 import re
+import asyncio
 from pathlib import Path
-from collections.abc import Callable
+from collections.abc import Callable, Coroutine
 
 from .config import Config
 
@@ -39,51 +40,30 @@ class Handle:
     ):
         self.commands = commands
         self.extra_args: set[str] = extra_args
-        """
-        需要额外的参数
-            "avatar":头像url
-            "group_info":群头像url,群名
-            "permission":权限等级
-                用户：0
-                群管：1
-                群主：2
-                超管：3
-            "image_list":图片url
-            "to_me":bool
-            "at":list
-        """
-
-    @staticmethod
-    async def func(event):
-        pass
+        self.func: Callable[..., Coroutine]
 
     async def __call__(self, event):
         return await self.func(event)
 
 
 class Plugin:
+    build_event: Callable[[Event]] = None
+    build_result: Callable[..., Result] = None
+
     def __init__(self, name: str = "") -> None:
         self.name: str = name
         self.handles: dict[int, Handle] = {}
         self.command_dict: dict[str, set[int]] = {}
         self.regex_dict: dict[re.Pattern, set[int]] = {}
         self.got_dict: dict = {}
-        self.raw_config: dict = {}
-
-    @staticmethod
-    def build_event(event) -> Event:
-        return event
-
-    @staticmethod
-    def build_result(result) -> Result:
-        return result
+        self.task_list: list[Coroutine] = []
 
     def handle(
         self,
         commands: str | set[str] | re.Pattern,
         extra_args: set[str] = set(),
     ):
-        def decorator(func: Callable):
+        def decorator(func: Callable[..., Coroutine]):
             key = len(self.handles)
             if isinstance(commands, set):
                 for command in commands:
@@ -105,6 +85,9 @@ class Plugin:
             self.handles[key] = handle
 
         return decorator
+
+    def loading(self, func: Callable[[], Coroutine]):
+        self.task_list.append(func())
 
     def command_check(self, command: str) -> dict[int, Event]:
         kv = {}
