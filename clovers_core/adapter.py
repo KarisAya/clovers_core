@@ -10,8 +10,9 @@ class AdapterException(Exception):
 
 
 class AdapterMethod:
-    kwarg = {}
-    send = {}
+    def __init__(self) -> None:
+        self.kwarg: dict = {}
+        self.send: dict = {}
 
     def get_kwarg(self, method_name: str) -> Callable:
         """添加一个获取参数方法"""
@@ -25,7 +26,7 @@ class AdapterMethod:
         """添加一个发送消息方法"""
 
         def decorator(func: Coroutine):
-            self.send[method_name] = func
+            self.send[method_name] = self.kwfilter(func)
 
         return decorator
 
@@ -41,27 +42,30 @@ class AdapterMethod:
 
 class Adapter:
     def __init__(self) -> None:
-        self.method: AdapterMethod = AdapterMethod()
+        self.methods: dict[str, AdapterMethod] = {}
+        self.main_method: AdapterMethod = AdapterMethod()
         self.plugins: list[Plugin] = []
 
-    async def response(self, command: str, **kwargs) -> int:
+    async def response(self, adapter: str, command: str, **kwargs) -> int:
         flag = 0
+        method = self.methods[adapter]
         for plugin in self.plugins:
             resp = plugin(command)
             for key, event in resp.items():
                 handle = plugin.handles[key]
-                for kw in handle.extra_args:
-                    get_kwarg = self.method.kwarg.get(kw)
+                for k in handle.extra_args:
+                    get_kwarg = method.kwarg.get(k) or self.main_method.kwarg.get(k)
                     if not get_kwarg:
-                        raise AdapterException(f"使用了未定义的 get_kwarg 方法:{kw}")
-                    event.kwargs[kw] = await get_kwarg(**kwargs)
+                        raise AdapterException(f"使用了未定义的 get_kwarg 方法:{k}")
+                    event.kwargs[k] = await get_kwarg(**kwargs)
                 result = await handle(event)
-                if result:
-                    flag += 1
-                    send_method = result.send_method
-                    send = self.method.send.get(send_method)
-                    if not send:
-                        raise AdapterException(f"使用了未定义的 send 方法:{send_method}")
-                    await self.method.send[send_method](result.data)
+                if not result:
+                    continue
+                flag += 1
+                k = result.send_method
+                send = method.send.get(k) or self.main_method.send.get(k)
+                if not send:
+                    raise AdapterException(f"使用了未定义的 send 方法:{k}")
+                await send(result.data)
 
         return flag

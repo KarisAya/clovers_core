@@ -24,7 +24,7 @@ class Event:
     def __init__(
         self,
         raw_command: str,
-        args: list = [],
+        args: list[str] = [],
     ):
         self.raw_command = raw_command
         self.args = args
@@ -54,10 +54,10 @@ class Handle:
         """
 
     @staticmethod
-    async def func(event: Event) -> Result:
+    async def func(event):
         pass
 
-    async def __call__(self, event: Event) -> Result:
+    async def __call__(self, event):
         return await self.func(event)
 
 
@@ -69,6 +69,14 @@ class Plugin:
         self.regex_dict: dict[re.Pattern, set[int]] = {}
         self.got_dict: dict = {}
         self.raw_config: dict = {}
+
+    @staticmethod
+    def build_event(event) -> Event:
+        return event
+
+    @staticmethod
+    def build_result(result) -> Result:
+        return result
 
     def handle(
         self,
@@ -89,9 +97,9 @@ class Plugin:
 
             handle = Handle(commands, extra_args)
 
-            async def wrapper(event: Event):
-                result = await func(event)
-                return result
+            async def wrapper(event: Event) -> Result:
+                result = await func(self.build_event(event))
+                return self.build_result(result)
 
             handle.func = wrapper
             self.handles[key] = handle
@@ -132,9 +140,9 @@ class Plugin:
 
 
 class PluginManager:
-    def __init__(self, plugins_path: Path, config: Config) -> None:
+    def __init__(self, plugins_path: Path, plugins_list: list) -> None:
         self.plugins_path: Path = plugins_path
-        self.config: Config = config
+        self.plugins_list: list = plugins_list
         self.plugins: list[Plugin] = []
 
     @staticmethod
@@ -161,5 +169,5 @@ class PluginManager:
         self.plugins += [plugin for plugin in plugins if plugin]
 
     def load_plugins(self):
-        self.load_plugins_from_list(self.config.plugins_list)
+        self.load_plugins_from_list(self.plugins_list)
         self.load_plugins_from_path(self.plugins_path)

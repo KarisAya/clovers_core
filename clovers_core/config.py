@@ -1,17 +1,13 @@
 import toml
-from pydantic import BaseModel, Extra
+from pydantic import BaseModel
 from pathlib import Path
 
 
-class Config(BaseModel, extra=Extra.ignore):
-    plugins_list: list = []
-    plugins: dict = {}
-
+class Config(BaseModel):
     @classmethod
     def load(cls, path: Path):
         if path.exists():
-            env_dict = toml.load(path)
-            config = cls.parse_obj(env_dict)
+            config = cls.parse_obj(toml.load(path))
         else:
             path.parent.mkdir(exist_ok=True, parents=True)
             config = cls()
@@ -19,5 +15,5 @@ class Config(BaseModel, extra=Extra.ignore):
         return config
 
     def save(self, path: Path):
-        with open(path, "w") as f:
+        with open(path, "w", encoding="utf8") as f:
             toml.dump(self.dict(), f)
