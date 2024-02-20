@@ -38,10 +38,10 @@ class Handle:
     def __init__(
         self,
         commands: set[str] | re.Pattern,
-        extra_args: set[str],
+        extra_args: list[str],
     ):
         self.commands = commands
-        self.extra_args: set[str] = extra_args
+        self.extra_args = extra_args
 
     async def __call__(self, event: Event) -> Result:
         return await self.func(event)
@@ -62,7 +62,7 @@ class Plugin:
     def handle(
         self,
         commands: str | set[str] | re.Pattern,
-        extra_args: set[str] = set(),
+        extra_args: list[str] | set[str] | tuple[str] = None,
     ):
         def decorator(func: Callable[..., Coroutine]):
             key = len(self.handles)
@@ -76,25 +76,19 @@ class Plugin:
             else:
                 raise PluginException(f"指令：{commands} 类型错误：{type(commands)}")
 
-            handle = Handle(commands, extra_args)
+            handle = Handle(commands, list[extra_args])
 
             async def wrapper(event: Event) -> Result:
-                result = await func(self.build_event(event))
-                return self.build_result(result)
+                if result := await func(self.build_event(event)):
+                    return self.build_result(result)
 
             handle.func = wrapper
             self.handles[key] = handle
 
         return decorator
 
-    def loading(self, func: Callable[[], Coroutine]):
-        index = len(self.task_list)
-
-        async def wrapper():
-            await func()
-            self.task_list[index] = None
-
-        self.task_list.append(wrapper())
+    def task(self, func: Callable[[], Coroutine]):
+        self.task_list.append(func())
 
     def command_check(self, command: str) -> dict[int, Event]:
         kv = {}
