@@ -1,4 +1,5 @@
 import inspect
+import asyncio
 from collections.abc import Coroutine, Callable
 
 from .plugin import Plugin
@@ -69,3 +70,12 @@ class Adapter:
                 await send(result.data)
 
         return flag
+
+    async def load(self):
+        await asyncio.gather(
+            *[
+                asyncio.create_task(task)
+                for plugin in self.plugins
+                for task in plugin.task_list
+            ]
+        )

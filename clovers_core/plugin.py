@@ -3,8 +3,8 @@ import importlib
 import importlib.util
 import importlib.machinery
 import re
-import asyncio
 from pathlib import Path
+from typing import Any
 from collections.abc import Callable, Coroutine
 
 from .config import Config
@@ -47,8 +47,8 @@ class Handle:
 
 
 class Plugin:
-    build_event: Callable[[Event]] = None
-    build_result: Callable[..., Result] = None
+    build_event: Callable[[Event], Any]
+    build_result: Callable[[Any], Result]
 
     def __init__(self, name: str = "") -> None:
         self.name: str = name
@@ -87,7 +87,13 @@ class Plugin:
         return decorator
 
     def loading(self, func: Callable[[], Coroutine]):
-        self.task_list.append(func())
+        index = len(self.task_list)
+
+        async def wrapper():
+            await func()
+            self.task_list[index] = None
+
+        self.task_list.append(wrapper())
 
     def command_check(self, command: str) -> dict[int, Event]:
         kv = {}
@@ -122,35 +128,33 @@ class Plugin:
         return kv
 
 
-class PluginManager:
+class PluginLoader:
     def __init__(self, plugins_path: Path, plugins_list: list) -> None:
         self.plugins_path: Path = plugins_path
         self.plugins_list: list = plugins_list
-        self.plugins: list[Plugin] = []
 
     @staticmethod
     def load(name: str) -> Plugin:
         print(f"【loading plugin】 {name} ...")
         return importlib.import_module(name).__plugin__
 
-    def load_plugins_from_path(self, plugins_path: Path):
-        plugins_raw_path = str(plugins_path)
+    def load_plugins_from_path(self):
+        plugins_raw_path = str(self.plugins_path)
         sys.path.insert(0, plugins_raw_path)
         plugins = []
-        for x in plugins_path.iterdir():
+        for x in self.plugins_path.iterdir():
             name = x.stem if x.is_file() and x.name.endswith(".py") else x.name
             if name.startswith("_"):
                 continue
             plugins.append(self.load(name))
         sys.path = [path for path in sys.path if path != plugins_raw_path]
-        self.plugins += [plugin for plugin in plugins if plugin]
+        return [plugin for plugin in plugins if plugin]
 
-    def load_plugins_from_list(self, plugins_list: list):
+    def load_plugins_from_list(self):
         plugins = []
-        for x in plugins_list:
+        for x in self.plugins_list:
             plugins.append(self.load(x))
-        self.plugins += [plugin for plugin in plugins if plugin]
+        return [plugin for plugin in plugins if plugin]
 
-    def load_plugins(self):
-        self.load_plugins_from_list(self.plugins_list)
-        self.load_plugins_from_path(self.plugins_path)
+    def load_plugins(self) -> list[Plugin]:
+        return self.load_plugins_from_list() + self.load_plugins_from_path()
