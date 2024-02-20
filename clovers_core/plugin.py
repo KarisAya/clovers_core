@@ -33,6 +33,8 @@ class Event:
 
 
 class Handle:
+    func: Callable[..., Coroutine]
+
     def __init__(
         self,
         commands: set[str] | re.Pattern,
@@ -40,15 +42,14 @@ class Handle:
     ):
         self.commands = commands
         self.extra_args: set[str] = extra_args
-        self.func: Callable[..., Coroutine]
 
-    async def __call__(self, event):
+    async def __call__(self, event: Event) -> Result:
         return await self.func(event)
 
 
 class Plugin:
-    build_event: Callable[[Event], Any]
-    build_result: Callable[[Any], Result]
+    build_event: Callable = lambda e: e
+    build_result: Callable = lambda r: r
 
     def __init__(self, name: str = "") -> None:
         self.name: str = name

@@ -50,6 +50,7 @@ class Adapter:
     async def response(self, adapter: str, command: str, **kwargs) -> int:
         flag = 0
         method = self.methods[adapter]
+        task_list = []
         for plugin in self.plugins:
             resp = plugin(command)
             for key, event in resp.items():
@@ -59,6 +60,7 @@ class Adapter:
                     if not get_kwarg:
                         raise AdapterException(f"使用了未定义的 get_kwarg 方法:{k}")
                     event.kwargs[k] = await get_kwarg(**kwargs)
+                task_list.append(asyncio.create_task(handle(event)))
                 result = await handle(event)
                 if not result:
                     continue
@@ -71,7 +73,7 @@ class Adapter:
 
         return flag
 
-    async def load(self):
+    async def start(self):
         await asyncio.gather(
             *[
                 asyncio.create_task(task)
