@@ -7,10 +7,8 @@ from pathlib import Path
 from typing import Any
 from collections.abc import Callable, Coroutine
 
-from .config import Config
 
-
-class PluginException(Exception):
+class PluginError(Exception):
     def __init__(self, message: str):
         super().__init__(message)
 
@@ -74,7 +72,7 @@ class Plugin:
             elif isinstance(commands, re.Pattern):
                 self.regex_dict.setdefault(commands, set()).add(key)
             else:
-                raise PluginException(f"指令：{commands} 类型错误：{type(commands)}")
+                raise PluginError(f"指令：{commands} 类型错误：{type(commands)}")
 
             handle = Handle(commands, list[extra_args])
 
